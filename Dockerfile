@@ -13,10 +13,14 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY requirements.txt .
 
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install cmake --upgrade && \
+    CMAKE_POLICY_VERSION_MINIMUM=3.5 pip install dlib==19.24.6 && \
+    pip install -r requirements.txt
+
+COPY . .
 
 EXPOSE 8000
 
