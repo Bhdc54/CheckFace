@@ -1,2 +1,0 @@
-[phases.setup]
-nixPkgs = ["libX11", "cmake", "gcc", "pkg-config"]
