@@ -1,17 +1,5 @@
-
-# Compiled class files
-*.class
-
-# Log files
-*.log
-
-# Package files
-*.jar
-*.war
-*.ear
-
-# Maven
-target/
-
-#
-src/main/resources
+__pycache__/
+*.pyc
+.env
+venv/
+relatorios/
