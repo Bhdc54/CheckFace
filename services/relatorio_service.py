@@ -24,7 +24,6 @@ class RelatorioService:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Presenças"
-
         # Título
         ws.merge_cells("A1:E1")
         ws["A1"] = f"Relatório de Presença — {aula[3]}"
