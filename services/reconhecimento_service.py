@@ -1,12 +1,14 @@
 import io
 import numpy as np
-import face_recognition
 from datetime import datetime
+from deepface import DeepFace
+from PIL import Image
 
 from repositories.aluno_repository import AlunoRepository
 from repositories.presenca_repository import PresencaRepository
 
-TOLERANCIA = 0.50
+MODELO = "Facenet512"
+TOLERANCIA = 0.40
 
 
 class ReconhecimentoService:
@@ -21,32 +23,62 @@ class ReconhecimentoService:
     def texto_para_encoding(self, texto: str) -> np.ndarray:
         return np.array(list(map(float, texto.split(","))))
 
-    def extrair_encoding(self, foto_bytes: bytes) -> np.ndarray:
-        imagem = face_recognition.load_image_file(io.BytesIO(foto_bytes))
-        locais = face_recognition.face_locations(imagem)
-        if len(locais) == 0:
+    def _bytes_para_imagem(self, foto_bytes: bytes) -> np.ndarray:
+        imagem = Image.open(io.BytesIO(foto_bytes)).convert("RGB")
+        return np.array(imagem)
+
+    def extrair_encoding(self, foto_bytes: bytes):
+        try:
+            img = self._bytes_para_imagem(foto_bytes)
+            resultado = DeepFace.represent(
+                img_path=img,
+                model_name=MODELO,
+                enforce_detection=True,
+                detector_backend="opencv"
+            )
+            if not resultado:
+                return None, "sem_rosto"
+            if len(resultado) > 1:
+                return None, "multiplos_rostos"
+            encoding = np.array(resultado[0]["embedding"])
+            return encoding, None
+        except ValueError:
             return None, "sem_rosto"
-        if len(locais) > 1:
-            return None, "multiplos_rostos"
-        encoding = face_recognition.face_encodings(imagem, locais)[0]
-        return encoding, None
+        except Exception as e:
+            print(f"Erro ao extrair encoding: {e}")
+            return None, "sem_rosto"
+
+    def _calcular_distancia(self, enc1: np.ndarray, enc2: np.ndarray) -> float:
+        enc1 = enc1 / np.linalg.norm(enc1)
+        enc2 = enc2 / np.linalg.norm(enc2)
+        return float(np.linalg.norm(enc1 - enc2))
 
     def reconhecer(self, foto_bytes: bytes, aula_id: int) -> dict:
-        imagem = face_recognition.load_image_file(io.BytesIO(foto_bytes))
-        locais = face_recognition.face_locations(imagem)
-
-        if len(locais) == 0:
+        try:
+            img = self._bytes_para_imagem(foto_bytes)
+            resultado = DeepFace.represent(
+                img_path=img,
+                model_name=MODELO,
+                enforce_detection=True,
+                detector_backend="opencv"
+            )
+            if not resultado:
+                return {"status": "sem_rosto"}
+            encoding_capturado = np.array(resultado[0]["embedding"])
+        except ValueError:
+            return {"status": "sem_rosto"}
+        except Exception as e:
+            print(f"Erro no reconhecimento: {e}")
             return {"status": "sem_rosto"}
 
-        encoding_capturado = face_recognition.face_encodings(imagem, locais)[0]
         alunos = self.aluno_repo.listar_com_encoding()
 
         melhor_aluno = None
-        menor_distancia = 1.0
+        menor_distancia = float("inf")
 
         for aluno in alunos:
             encoding_salvo = self.texto_para_encoding(aluno.encoding)
-            distancia = face_recognition.face_distance([encoding_salvo], encoding_capturado)[0]
+            distancia = self._calcular_distancia(encoding_capturado, encoding_salvo)
             if distancia < menor_distancia:
                 menor_distancia = distancia
                 melhor_aluno = aluno
@@ -62,7 +94,8 @@ class ReconhecimentoService:
             }
 
         agora = datetime.now()
-        confianca = round(1 - menor_distancia, 2)
+        confianca = round(1 - (menor_distancia / TOLERANCIA), 2)
+        confianca = max(0.0, min(1.0, confianca))
 
         self.presenca_repo.registrar(
             melhor_aluno.id, aula_id,
