@@ -1,9 +1,7 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import face_recognition
-import io
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
@@ -112,3 +110,9 @@ def finalizar_aula(aula_id: int):
 def listar_presencas():
     dados = presenca_repo.listar_todas()
     return [{"nome": d[0], "matricula": d[1], "data": str(d[2]), "hora": str(d[3]), "confianca": d[4], "turma": d[5]} for d in dados]
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
