@@ -51,12 +51,27 @@ class AlunoRepository:
         conn.close()
         return row
 
-    def criar(self, nome: str, matricula: str, turma_id: int, encoding_str: str) -> Aluno:
+    def buscar_por_matricula_e_senha(self, matricula: str, senha: str):
+        """Busca aluno pelo RGA e senha para login."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO alunos (nome, matricula, turma_id, encoding) VALUES (%s, %s, %s, %s) RETURNING id",
-            (nome, matricula, turma_id, encoding_str)
+            "SELECT id, nome, matricula, turma_id FROM alunos WHERE matricula = %s AND senha = %s",
+            (matricula, senha)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return None
+        return Aluno(row[0], row[1], row[2], row[3])
+
+    def criar(self, nome: str, matricula: str, turma_id: int, encoding_str: str, senha: str = None) -> Aluno:
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO alunos (nome, matricula, turma_id, encoding, senha) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (nome, matricula, turma_id, encoding_str, senha)
         )
         aluno_id = cursor.fetchone()[0]
         conn.commit()

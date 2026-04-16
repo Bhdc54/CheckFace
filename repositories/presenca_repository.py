@@ -78,3 +78,30 @@ class PresencaRepository:
         cursor.close()
         conn.close()
         return rows
+
+    def listar_por_matricula(self, matricula: str):
+        """Retorna histórico de presenças de um aluno pelo RGA."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT t.nome as turma, au.iniciada_em, p.data, p.hora, p.confianca
+            FROM presencas p
+            JOIN alunos a ON a.id = p.aluno_id
+            JOIN aulas au ON au.id = p.aula_id
+            JOIN turmas t ON t.id = au.turma_id
+            WHERE a.matricula = %s
+            ORDER BY p.data DESC, p.hora DESC
+        """, (matricula,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [
+            {
+                "turma": r[0],
+                "aula_iniciada_em": str(r[1]),
+                "data": str(r[2]),
+                "hora": str(r[3]),
+                "confianca": r[4]
+            }
+            for r in rows
+        ]
