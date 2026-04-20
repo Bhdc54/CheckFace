@@ -22,12 +22,12 @@ class AulaRepository:
             return None
         return Aula(row[0], row[1], row[2])
 
-    def criar(self, turma_id: int) -> Aula:
+    def criar(self, turma_id: int, sala_id: int = None) -> Aula:
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO aulas (turma_id) VALUES (%s) RETURNING id, iniciada_em",
-            (turma_id,)
+            "INSERT INTO aulas (turma_id, sala_id) VALUES (%s, %s) RETURNING id, iniciada_em",
+            (turma_id, sala_id)
         )
         row = cursor.fetchone()
         conn.commit()
@@ -39,9 +39,10 @@ class AulaRepository:
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT au.id, au.turma_id, au.iniciada_em, t.nome, t.professor
+            SELECT au.id, au.turma_id, au.iniciada_em, t.nome, t.professor, s.nome as sala
             FROM aulas au
             JOIN turmas t ON t.id = au.turma_id
+            LEFT JOIN salas s ON s.id = au.sala_id
             WHERE au.id = %s
         """, (aula_id,))
         row = cursor.fetchone()

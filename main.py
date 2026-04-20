@@ -11,6 +11,7 @@ from repositories.aluno_repository import AlunoRepository
 from repositories.aula_repository import AulaRepository
 from repositories.presenca_repository import PresencaRepository
 from repositories.professor_repository import ProfessorRepository
+from repositories.sala_repository import SalaRepository
 from services.reconhecimento_service import ReconhecimentoService
 from services.relatorio_service import RelatorioService
 
@@ -21,13 +22,11 @@ aluno_repo = AlunoRepository()
 aula_repo = AulaRepository()
 presenca_repo = PresencaRepository()
 professor_repo = ProfessorRepository()
+sala_repo = SalaRepository()
 reconhecimento_service = ReconhecimentoService()
 relatorio_service = RelatorioService()
 
 
-# ============================================================
-# RAIZ
-# ============================================================
 @app.get("/")
 def inicio():
     return {"mensagem": "API CheckFace funcionando", "versao": "2.0.0"}
@@ -38,33 +37,38 @@ def inicio():
 # ============================================================
 @app.post("/login/aluno")
 def login_aluno(matricula: str = Form(...), senha: str = Form(...)):
-    """Login do aluno pelo RGA e senha."""
     aluno = aluno_repo.buscar_por_matricula_e_senha(matricula, senha)
     if not aluno:
         raise HTTPException(status_code=401, detail="RGA ou senha inválidos.")
-    return {
-        "tipo": "aluno",
-        "id": aluno.id,
-        "nome": aluno.nome,
-        "matricula": aluno.matricula,
-        "turma_id": aluno.turma_id
-    }
+    return {"tipo": "aluno", "id": aluno.id, "nome": aluno.nome, "matricula": aluno.matricula, "turma_id": aluno.turma_id}
 
 
 @app.post("/login/professor")
 def login_professor(siape: str = Form(...), senha: str = Form(...)):
-    """Login do professor pelo SIAPE e senha."""
     professor = professor_repo.buscar_por_siape(siape)
     if not professor or professor.senha != senha:
         raise HTTPException(status_code=401, detail="SIAPE ou senha inválidos.")
     turmas = professor_repo.listar_turmas_do_professor(professor.id)
-    return {
-        "tipo": "professor",
-        "id": professor.id,
-        "nome": professor.nome,
-        "siape": professor.siape,
-        "turmas": turmas
-    }
+    return {"tipo": "professor", "id": professor.id, "nome": professor.nome, "siape": professor.siape, "turmas": turmas}
+
+
+# ============================================================
+# SALAS
+# ============================================================
+@app.get("/salas")
+def listar_salas():
+    return [s.to_dict() for s in sala_repo.listar()]
+
+
+@app.post("/salas")
+def criar_sala(nome: str = Form(...), descricao: str = Form(None)):
+    return sala_repo.criar(nome, descricao).to_dict()
+
+
+@app.delete("/salas/{sala_id}")
+def deletar_sala(sala_id: int):
+    sala_repo.deletar(sala_id)
+    return {"mensagem": "Sala removida."}
 
 
 # ============================================================
@@ -76,11 +80,7 @@ def listar_professores():
 
 
 @app.post("/professores/cadastrar")
-def cadastrar_professor(
-    nome: str = Form(...),
-    siape: str = Form(...),
-    senha: str = Form(...)
-):
+def cadastrar_professor(nome: str = Form(...), siape: str = Form(...), senha: str = Form(...)):
     if professor_repo.buscar_por_siape(siape):
         raise HTTPException(status_code=409, detail="SIAPE já cadastrado.")
     professor = professor_repo.criar(nome, siape, senha)
@@ -89,7 +89,6 @@ def cadastrar_professor(
 
 @app.post("/professores/{professor_id}/vincular_turma")
 def vincular_turma(professor_id: int, turma_id: int = Form(...)):
-    """Vincula um professor a uma turma."""
     professor_repo.vincular_turma(professor_id, turma_id)
     return {"mensagem": "Professor vinculado à turma com sucesso!"}
 
@@ -133,11 +132,8 @@ def listar_alunos_por_turma(turma_id: int):
 
 @app.post("/alunos/cadastrar")
 async def cadastrar_aluno(
-    nome: str = Form(...),
-    matricula: str = Form(...),
-    turma_id: int = Form(...),
-    senha: str = Form(...),
-    foto: UploadFile = File(...)
+    nome: str = Form(...), matricula: str = Form(...),
+    turma_id: int = Form(...), senha: str = Form(...), foto: UploadFile = File(...)
 ):
     conteudo = await foto.read()
     encoding, erro = reconhecimento_service.extrair_encoding(conteudo)
@@ -171,11 +167,11 @@ async def reconhecer(foto: UploadFile = File(...), aula_id: int = Form(...)):
 # AULAS
 # ============================================================
 @app.post("/aulas/iniciar")
-def iniciar_aula(turma_id: int = Form(...)):
+def iniciar_aula(turma_id: int = Form(...), sala_id: int = Form(...)):
     aula_existente = aula_repo.buscar_ativa(turma_id)
     if aula_existente:
         return {"id": aula_existente.id, "mensagem": "Aula já estava em andamento.", "status": "ja_ativa"}
-    aula = aula_repo.criar(turma_id)
+    aula = aula_repo.criar(turma_id, sala_id)
     return {"id": aula.id, "turma_id": aula.turma_id, "mensagem": "Aula iniciada!", "status": "iniciada"}
 
 
@@ -224,9 +220,7 @@ def listar_presencas():
 
 @app.get("/alunos/{matricula}/presencas")
 def presencas_do_aluno(matricula: str):
-    """Retorna histórico de presenças de um aluno específico."""
-    dados = presenca_repo.listar_por_matricula(matricula)
-    return dados
+    return presenca_repo.listar_por_matricula(matricula)
 
 
 if __name__ == "__main__":

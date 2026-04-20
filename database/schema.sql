@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS turmas (
     criado_em   TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS salas (
+    id          SERIAL PRIMARY KEY,
+    nome        VARCHAR(80) NOT NULL,
+    descricao   TEXT,
+    criado_em   TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS alunos (
     id          SERIAL PRIMARY KEY,
     nome        VARCHAR(120) NOT NULL,
@@ -22,6 +29,7 @@ CREATE TABLE IF NOT EXISTS alunos (
 CREATE TABLE IF NOT EXISTS aulas (
     id              SERIAL PRIMARY KEY,
     turma_id        INT REFERENCES turmas(id) ON DELETE CASCADE,
+    sala_id         INT REFERENCES salas(id) ON DELETE SET NULL,
     iniciada_em     TIMESTAMP DEFAULT NOW(),
     finalizada_em   TIMESTAMP,
     relatorio_path  TEXT
@@ -36,10 +44,11 @@ CREATE TABLE IF NOT EXISTS presencas (
     confianca       FLOAT,     -- 0.0 a 1.0 (quanto maior, mais certeza)
     UNIQUE(aluno_id, aula_id) -- evita duplicata na mesma aula
 );
+
 -- ============================================================
 -- CheckFace - Tabela de Professores
 -- ============================================================
- 
+
 CREATE TABLE IF NOT EXISTS professores (
     id          SERIAL PRIMARY KEY,
     nome        VARCHAR(120) NOT NULL,
@@ -47,7 +56,7 @@ CREATE TABLE IF NOT EXISTS professores (
     senha       VARCHAR(255) NOT NULL,
     criado_em   TIMESTAMP DEFAULT NOW()
 );
- 
+
 -- Tabela de vínculo entre professor e turma (um professor pode ter várias turmas)
 CREATE TABLE IF NOT EXISTS professor_turmas (
     id              SERIAL PRIMARY KEY,
@@ -55,6 +64,11 @@ CREATE TABLE IF NOT EXISTS professor_turmas (
     turma_id        INT REFERENCES turmas(id) ON DELETE CASCADE,
     UNIQUE(professor_id, turma_id)
 );
- 
+
 -- Adicionar senha na tabela de alunos (se ainda não tiver)
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS senha VARCHAR(255);
+
+-- Adicionar sala_id na tabela de aulas (se ainda não tiver)
+ALTER TABLE aulas ADD COLUMN IF NOT EXISTS sala_id INT REFERENCES salas(id) ON DELETE SET NULL;
+
+-- Salas padrão
