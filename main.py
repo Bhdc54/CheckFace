@@ -45,8 +45,8 @@ def login_aluno(matricula: str = Form(...), senha: str = Form(...)):
 
 @app.post("/login/professor")
 def login_professor(siape: str = Form(...), senha: str = Form(...)):
-    professor = professor_repo.buscar_por_siape(siape)
-    if not professor or professor.senha != senha:
+    professor = professor_repo.verificar_login(siape, senha)
+    if not professor:
         raise HTTPException(status_code=401, detail="SIAPE ou senha inválidos.")
     turmas = professor_repo.listar_turmas_do_professor(professor.id)
     return {"tipo": "professor", "id": professor.id, "nome": professor.nome, "siape": professor.siape, "turmas": turmas}

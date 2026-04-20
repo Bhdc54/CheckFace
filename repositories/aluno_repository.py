@@ -1,5 +1,6 @@
 import sys
 import os
+import bcrypt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.conectar import conectar
@@ -8,14 +9,16 @@ from models.aluno import Aluno
 
 class AlunoRepository:
 
+    def _hash_senha(self, senha: str) -> str:
+        return bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def _verificar_senha(self, senha: str, hash_salvo: str) -> bool:
+        return bcrypt.checkpw(senha.encode('utf-8'), hash_salvo.encode('utf-8'))
+
     def listar(self):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT a.id, a.nome, a.matricula, a.turma_id, a.encoding
-            FROM alunos a
-            ORDER BY a.nome
-        """)
+        cursor.execute("SELECT a.id, a.nome, a.matricula, a.turma_id, a.encoding FROM alunos a ORDER BY a.nome")
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -52,26 +55,32 @@ class AlunoRepository:
         return row
 
     def buscar_por_matricula_e_senha(self, matricula: str, senha: str):
-        """Busca aluno pelo RGA e senha para login."""
+        """Busca aluno e verifica senha com bcrypt."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, nome, matricula, turma_id FROM alunos WHERE matricula = %s AND senha = %s",
-            (matricula, senha)
+            "SELECT id, nome, matricula, turma_id, senha FROM alunos WHERE matricula = %s",
+            (matricula,)
         )
         row = cursor.fetchone()
         cursor.close()
         conn.close()
         if not row:
             return None
+        senha_hash = row[4]
+        if not senha_hash:
+            return None
+        if not self._verificar_senha(senha, senha_hash):
+            return None
         return Aluno(row[0], row[1], row[2], row[3])
 
     def criar(self, nome: str, matricula: str, turma_id: int, encoding_str: str, senha: str = None) -> Aluno:
         conn = conectar()
         cursor = conn.cursor()
+        senha_hash = self._hash_senha(senha) if senha else None
         cursor.execute(
             "INSERT INTO alunos (nome, matricula, turma_id, encoding, senha) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (nome, matricula, turma_id, encoding_str, senha)
+            (nome, matricula, turma_id, encoding_str, senha_hash)
         )
         aluno_id = cursor.fetchone()[0]
         conn.commit()

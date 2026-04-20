@@ -1,5 +1,6 @@
 import sys
 import os
+import bcrypt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.conectar import conectar
@@ -8,12 +9,19 @@ from models.professor import Professor
 
 class ProfessorRepository:
 
+    def _hash_senha(self, senha: str) -> str:
+        return bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def _verificar_senha(self, senha: str, hash_salvo: str) -> bool:
+        return bcrypt.checkpw(senha.encode('utf-8'), hash_salvo.encode('utf-8'))
+
     def criar(self, nome: str, siape: str, senha: str) -> Professor:
         conn = conectar()
         cursor = conn.cursor()
+        senha_hash = self._hash_senha(senha)
         cursor.execute(
             "INSERT INTO professores (nome, siape, senha) VALUES (%s, %s, %s) RETURNING id, criado_em",
-            (nome, siape, senha)
+            (nome, siape, senha_hash)
         )
         row = cursor.fetchone()
         conn.commit()
@@ -34,6 +42,15 @@ class ProfessorRepository:
         if not row:
             return None
         return Professor(row[0], row[1], row[2], row[3])
+
+    def verificar_login(self, siape: str, senha: str):
+        """Busca professor e verifica senha com bcrypt."""
+        professor = self.buscar_por_siape(siape)
+        if not professor:
+            return None
+        if not self._verificar_senha(senha, professor.senha):
+            return None
+        return professor
 
     def listar(self):
         conn = conectar()
