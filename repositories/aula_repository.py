@@ -22,6 +22,22 @@ class AulaRepository:
             return None
         return Aula(row[0], row[1], row[2])
 
+    def buscar_ativa_por_sala(self, sala_id: int):
+        """Busca aula ativa em uma sala específica — usado pelo ESP32."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT au.id, t.nome
+            FROM aulas au
+            JOIN turmas t ON t.id = au.turma_id
+            WHERE au.sala_id = %s AND au.finalizada_em IS NULL
+            LIMIT 1
+        """, (sala_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row
+
     def criar(self, turma_id: int, sala_id: int = None) -> Aula:
         conn = conectar()
         cursor = conn.cursor()

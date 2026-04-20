@@ -27,6 +27,9 @@ reconhecimento_service = ReconhecimentoService()
 relatorio_service = RelatorioService()
 
 
+# ============================================================
+# RAIZ
+# ============================================================
 @app.get("/")
 def inicio():
     return {"mensagem": "API CheckFace funcionando", "versao": "2.0.0"}
@@ -40,7 +43,13 @@ def login_aluno(matricula: str = Form(...), senha: str = Form(...)):
     aluno = aluno_repo.buscar_por_matricula_e_senha(matricula, senha)
     if not aluno:
         raise HTTPException(status_code=401, detail="RGA ou senha inválidos.")
-    return {"tipo": "aluno", "id": aluno.id, "nome": aluno.nome, "matricula": aluno.matricula, "turma_id": aluno.turma_id}
+    return {
+        "tipo": "aluno",
+        "id": aluno.id,
+        "nome": aluno.nome,
+        "matricula": aluno.matricula,
+        "turma_id": aluno.turma_id
+    }
 
 
 @app.post("/login/professor")
@@ -49,7 +58,13 @@ def login_professor(siape: str = Form(...), senha: str = Form(...)):
     if not professor:
         raise HTTPException(status_code=401, detail="SIAPE ou senha inválidos.")
     turmas = professor_repo.listar_turmas_do_professor(professor.id)
-    return {"tipo": "professor", "id": professor.id, "nome": professor.nome, "siape": professor.siape, "turmas": turmas}
+    return {
+        "tipo": "professor",
+        "id": professor.id,
+        "nome": professor.nome,
+        "siape": professor.siape,
+        "turmas": turmas
+    }
 
 
 # ============================================================
@@ -63,6 +78,15 @@ def listar_salas():
 @app.post("/salas")
 def criar_sala(nome: str = Form(...), descricao: str = Form(None)):
     return sala_repo.criar(nome, descricao).to_dict()
+
+
+@app.get("/salas/{sala_id}/aula_ativa")
+def aula_ativa_por_sala(sala_id: int):
+    """Endpoint usado pelo ESP32 para verificar se há aula ativa na sala."""
+    aula = aula_repo.buscar_ativa_por_sala(sala_id)
+    if not aula:
+        return {"ativa": False}
+    return {"ativa": True, "aula_id": aula[0], "turma": aula[1]}
 
 
 @app.delete("/salas/{sala_id}")
@@ -80,11 +104,20 @@ def listar_professores():
 
 
 @app.post("/professores/cadastrar")
-def cadastrar_professor(nome: str = Form(...), siape: str = Form(...), senha: str = Form(...)):
+def cadastrar_professor(
+    nome: str = Form(...),
+    siape: str = Form(...),
+    senha: str = Form(...)
+):
     if professor_repo.buscar_por_siape(siape):
         raise HTTPException(status_code=409, detail="SIAPE já cadastrado.")
     professor = professor_repo.criar(nome, siape, senha)
-    return {"id": professor.id, "nome": professor.nome, "siape": professor.siape, "mensagem": "Professor cadastrado!"}
+    return {
+        "id": professor.id,
+        "nome": professor.nome,
+        "siape": professor.siape,
+        "mensagem": "Professor cadastrado!"
+    }
 
 
 @app.post("/professores/{professor_id}/vincular_turma")
@@ -132,8 +165,11 @@ def listar_alunos_por_turma(turma_id: int):
 
 @app.post("/alunos/cadastrar")
 async def cadastrar_aluno(
-    nome: str = Form(...), matricula: str = Form(...),
-    turma_id: int = Form(...), senha: str = Form(...), foto: UploadFile = File(...)
+    nome: str = Form(...),
+    matricula: str = Form(...),
+    turma_id: int = Form(...),
+    senha: str = Form(...),
+    foto: UploadFile = File(...)
 ):
     conteudo = await foto.read()
     encoding, erro = reconhecimento_service.extrair_encoding(conteudo)
@@ -145,7 +181,12 @@ async def cadastrar_aluno(
         raise HTTPException(status_code=409, detail="Matrícula já cadastrada.")
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
     aluno = aluno_repo.criar(nome, matricula, turma_id, encoding_str, senha)
-    return {"id": aluno.id, "nome": aluno.nome, "matricula": aluno.matricula, "mensagem": "Aluno cadastrado com sucesso!"}
+    return {
+        "id": aluno.id,
+        "nome": aluno.nome,
+        "matricula": aluno.matricula,
+        "mensagem": "Aluno cadastrado com sucesso!"
+    }
 
 
 @app.delete("/alunos/{aluno_id}")
@@ -190,7 +231,10 @@ def presencas_da_aula(aula_id: int):
     return {
         "total_turma": total,
         "total_presentes": len(dados),
-        "presencas": [{"nome": d[0], "matricula": d[1], "hora": str(d[2]), "confianca": d[3]} for d in dados]
+        "presencas": [
+            {"nome": d[0], "matricula": d[1], "hora": str(d[2]), "confianca": d[3]}
+            for d in dados
+        ]
     }
 
 
@@ -215,7 +259,10 @@ def finalizar_aula(aula_id: int):
 @app.get("/presencas")
 def listar_presencas():
     dados = presenca_repo.listar_todas()
-    return [{"nome": d[0], "matricula": d[1], "data": str(d[2]), "hora": str(d[3]), "confianca": d[4], "turma": d[5]} for d in dados]
+    return [
+        {"nome": d[0], "matricula": d[1], "data": str(d[2]), "hora": str(d[3]), "confianca": d[4], "turma": d[5]}
+        for d in dados
+    ]
 
 
 @app.get("/alunos/{matricula}/presencas")
