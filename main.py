@@ -5,9 +5,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from repositories.aluno_repository import AlunoRepository
-from repositories.acesso_repository import AcessoRepository
 from repositories.professor_repository import ProfessorRepository
 from repositories.sala_repository import SalaRepository
+from repositories.acesso_repository import AcessoRepository
 from services.reconhecimento_service import ReconhecimentoService
 
 app = FastAPI(
