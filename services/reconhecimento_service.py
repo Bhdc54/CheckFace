@@ -5,7 +5,7 @@ from deepface import DeepFace
 from PIL import Image
 
 from repositories.aluno_repository import AlunoRepository
-from repositories.presenca_repository import PresencaRepository
+from repositories.acesso_repository import AcessoRepository
 
 MODELO = "Facenet512"
 TOLERANCIA = 0.40
@@ -14,8 +14,8 @@ TOLERANCIA = 0.40
 class ReconhecimentoService:
 
     def __init__(self):
-        self.aluno_repo = AlunoRepository()
-        self.presenca_repo = PresencaRepository()
+        self.usuario_repo = AlunoRepository()
+        self.acesso_repo = AcessoRepository()
 
     def encoding_para_texto(self, encoding: np.ndarray) -> str:
         return ",".join(map(str, encoding))
@@ -53,7 +53,10 @@ class ReconhecimentoService:
         enc2 = enc2 / np.linalg.norm(enc2)
         return float(np.linalg.norm(enc1 - enc2))
 
-    def reconhecer(self, foto_bytes: bytes, aula_id: int) -> dict:
+    def reconhecer(self, foto_bytes: bytes) -> dict:
+        """Reconhece o rosto e registra o acesso como liberado ou negado."""
+        agora = datetime.now()
+
         try:
             img = self._bytes_para_imagem(foto_bytes)
             resultado = DeepFace.represent(
@@ -63,49 +66,75 @@ class ReconhecimentoService:
                 detector_backend="opencv"
             )
             if not resultado:
-                return {"status": "sem_rosto"}
+                return {
+                    "status": "negado",
+                    "mensagem": "Acesso NEGADO — nenhum rosto detectado.",
+                    "data": agora.strftime("%d/%m/%Y"),
+                    "hora": agora.strftime("%H:%M:%S")
+                }
             encoding_capturado = np.array(resultado[0]["embedding"])
         except ValueError:
-            return {"status": "sem_rosto"}
+            return {
+                "status": "negado",
+                "mensagem": "Acesso NEGADO — nenhum rosto detectado.",
+                "data": agora.strftime("%d/%m/%Y"),
+                "hora": agora.strftime("%H:%M:%S")
+            }
         except Exception as e:
             print(f"Erro no reconhecimento: {e}")
-            return {"status": "sem_rosto"}
+            return {
+                "status": "negado",
+                "mensagem": "Acesso NEGADO — erro no processamento.",
+                "data": agora.strftime("%d/%m/%Y"),
+                "hora": agora.strftime("%H:%M:%S")
+            }
 
-        alunos = self.aluno_repo.listar_com_encoding()
+        usuarios = self.usuario_repo.listar_com_encoding()
 
-        melhor_aluno = None
+        melhor_usuario = None
         menor_distancia = float("inf")
 
-        for aluno in alunos:
-            encoding_salvo = self.texto_para_encoding(aluno.encoding)
+        for usuario in usuarios:
+            encoding_salvo = self.texto_para_encoding(usuario.encoding)
             distancia = self._calcular_distancia(encoding_capturado, encoding_salvo)
             if distancia < menor_distancia:
                 menor_distancia = distancia
-                melhor_aluno = aluno
+                melhor_usuario = usuario
 
-        if melhor_aluno is None or menor_distancia > TOLERANCIA:
-            return {"status": "nao_reconhecido"}
-
-        if self.presenca_repo.ja_registrada(melhor_aluno.id, aula_id):
+        if melhor_usuario is None or menor_distancia > TOLERANCIA:
+            # Registra acesso negado sem usuario_id
+            self.acesso_repo.registrar(
+                usuario_id=None,
+                data=agora.date(),
+                hora=agora.time(),
+                status="negado",
+                confianca=0.0
+            )
             return {
-                "status": "ja_registrado",
-                "aluno": melhor_aluno.nome,
-                "mensagem": "Presença já registrada nesta aula."
+                "status": "negado",
+                "mensagem": "Acesso NEGADO — pessoa não cadastrada.",
+                "data": agora.strftime("%d/%m/%Y"),
+                "hora": agora.strftime("%H:%M:%S")
             }
 
-        agora = datetime.now()
         confianca = round(1 - (menor_distancia / TOLERANCIA), 2)
         confianca = max(0.0, min(1.0, confianca))
 
-        self.presenca_repo.registrar(
-            melhor_aluno.id, aula_id,
-            agora.date(), agora.time(), confianca
+        # Registra acesso liberado
+        self.acesso_repo.registrar(
+            usuario_id=melhor_usuario.id,
+            data=agora.date(),
+            hora=agora.time(),
+            status="liberado",
+            confianca=confianca
         )
 
         return {
-            "status": "reconhecido",
-            "aluno": melhor_aluno.nome,
-            "matricula": melhor_aluno.matricula,
+            "status": "liberado",
+            "mensagem": f"Acesso LIBERADO — Bem-vindo, {melhor_usuario.nome}!",
+            "nome": melhor_usuario.nome,
+            "matricula": melhor_usuario.matricula,
             "confianca": confianca,
+            "data": agora.strftime("%d/%m/%Y"),
             "hora": agora.strftime("%H:%M:%S")
         }
