@@ -5,9 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from repositories.aluno_repository import AlunoRepository
-from repositories.professor_repository import ProfessorRepository
-from repositories.sala_repository import SalaRepository
 from repositories.acesso_repository import AcessoRepository
+from repositories.professor_repository import ProfessorRepository
 from services.reconhecimento_service import ReconhecimentoService
 
 app = FastAPI(
@@ -18,7 +17,6 @@ app = FastAPI(
 usuario_repo = AlunoRepository()
 acesso_repo = AcessoRepository()
 professor_repo = ProfessorRepository()
-sala_repo = SalaRepository()
 reconhecimento_service = ReconhecimentoService()
 
 
@@ -42,7 +40,8 @@ def login_usuario(matricula: str = Form(...), senha: str = Form(...)):
         "tipo": "usuario",
         "id": usuario.id,
         "nome": usuario.nome,
-        "matricula": usuario.matricula
+        "matricula": usuario.matricula,
+        "acesso_liberado": usuario.acesso_liberado
     }
 
 
@@ -51,12 +50,7 @@ def login_admin(siape: str = Form(...), senha: str = Form(...)):
     admin = professor_repo.verificar_login(siape, senha)
     if not admin:
         raise HTTPException(status_code=401, detail="SIAPE ou senha inválidos.")
-    return {
-        "tipo": "admin",
-        "id": admin.id,
-        "nome": admin.nome,
-        "siape": admin.siape
-    }
+    return {"tipo": "admin", "id": admin.id, "nome": admin.nome, "siape": admin.siape}
 
 
 # ============================================================
@@ -83,8 +77,13 @@ async def cadastrar_usuario(
     if usuario_repo.buscar_por_matricula(matricula):
         raise HTTPException(status_code=409, detail="Matrícula já cadastrada.")
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
-    usuario = usuario_repo.criar(nome, matricula, 1, encoding_str, senha)
-    return {"id": usuario.id, "nome": usuario.nome, "matricula": usuario.matricula, "mensagem": "Usuário cadastrado com sucesso!"}
+    usuario = usuario_repo.criar(nome, matricula, encoding_str, senha)
+    return {
+        "id": usuario.id,
+        "nome": usuario.nome,
+        "matricula": usuario.matricula,
+        "mensagem": "Cadastro realizado! Aguarde liberação do administrador."
+    }
 
 
 @app.delete("/usuarios/{usuario_id}")
@@ -94,7 +93,36 @@ def deletar_usuario(usuario_id: int):
 
 
 # ============================================================
-# RECONHECIMENTO / CONTROLE DE ACESSO
+# CONTROLE DE ACESSO — ADMIN
+# ============================================================
+@app.post("/admin/liberar_acesso")
+def liberar_acesso(matricula: str = Form(...)):
+    """Admin libera acesso pelo RGA do usuário."""
+    row = usuario_repo.liberar_acesso(matricula)
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"mensagem": f"Acesso liberado para {row[1]}!"}
+
+
+@app.post("/admin/revogar_acesso")
+def revogar_acesso(matricula: str = Form(...)):
+    """Admin revoga acesso pelo RGA do usuário."""
+    row = usuario_repo.revogar_acesso(matricula)
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"mensagem": f"Acesso revogado para {row[1]}."}
+
+
+@app.post("/admin/cadastrar")
+def cadastrar_admin(nome: str = Form(...), siape: str = Form(...), senha: str = Form(...)):
+    if professor_repo.buscar_por_siape(siape):
+        raise HTTPException(status_code=409, detail="SIAPE já cadastrado.")
+    admin = professor_repo.criar(nome, siape, senha)
+    return {"id": admin.id, "nome": admin.nome, "mensagem": "Admin cadastrado!"}
+
+
+# ============================================================
+# RECONHECIMENTO
 # ============================================================
 @app.post("/reconhecer")
 async def reconhecer(foto: UploadFile = File(...)):
@@ -107,35 +135,17 @@ async def reconhecer(foto: UploadFile = File(...)):
 # ============================================================
 @app.get("/acessos")
 def listar_acessos():
-    """Lista todos os acessos — para o admin."""
     return acesso_repo.listar_todos()
 
 
 @app.get("/acessos/hoje")
 def acessos_hoje():
-    """Lista acessos do dia — para o admin ver em tempo real."""
     return acesso_repo.listar_hoje()
 
 
 @app.get("/usuarios/{usuario_id}/acessos")
 def historico_usuario(usuario_id: int):
-    """Histórico de acessos do usuário — para ele ver no app."""
     return acesso_repo.listar_por_usuario(usuario_id)
-
-
-# ============================================================
-# ADMIN
-# ============================================================
-@app.post("/admin/cadastrar")
-def cadastrar_admin(
-    nome: str = Form(...),
-    siape: str = Form(...),
-    senha: str = Form(...)
-):
-    if professor_repo.buscar_por_siape(siape):
-        raise HTTPException(status_code=409, detail="SIAPE já cadastrado.")
-    admin = professor_repo.criar(nome, siape, senha)
-    return {"id": admin.id, "nome": admin.nome, "mensagem": "Admin cadastrado!"}
 
 
 if __name__ == "__main__":

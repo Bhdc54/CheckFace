@@ -18,32 +18,24 @@ class AlunoRepository:
     def listar(self):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("SELECT a.id, a.nome, a.matricula, a.turma_id, a.encoding FROM alunos a ORDER BY a.nome")
+        cursor.execute("""
+            SELECT id, nome, matricula, encoding, acesso_liberado
+            FROM alunos
+            ORDER BY nome
+        """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [Aluno(r[0], r[1], r[2], r[3], r[4]) for r in rows]
-
-    def listar_por_turma(self, turma_id: int):
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, nome, matricula, turma_id, encoding FROM alunos WHERE turma_id = %s ORDER BY nome",
-            (turma_id,)
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return [Aluno(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+        return [Aluno(r[0], r[1], r[2], encoding=r[3], acesso_liberado=r[4]) for r in rows]
 
     def listar_com_encoding(self):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, nome, matricula, encoding FROM alunos WHERE encoding IS NOT NULL")
+        cursor.execute("SELECT id, nome, matricula, encoding, acesso_liberado FROM alunos WHERE encoding IS NOT NULL")
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [Aluno(r[0], r[1], r[2], encoding=r[3]) for r in rows]
+        return [Aluno(r[0], r[1], r[2], encoding=r[3], acesso_liberado=r[4]) for r in rows]
 
     def buscar_por_matricula(self, matricula: str):
         conn = conectar()
@@ -55,11 +47,10 @@ class AlunoRepository:
         return row
 
     def buscar_por_matricula_e_senha(self, matricula: str, senha: str):
-        """Busca aluno e verifica senha com bcrypt."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, nome, matricula, turma_id, senha FROM alunos WHERE matricula = %s",
+            "SELECT id, nome, matricula, senha, acesso_liberado FROM alunos WHERE matricula = %s",
             (matricula,)
         )
         row = cursor.fetchone()
@@ -67,26 +58,52 @@ class AlunoRepository:
         conn.close()
         if not row:
             return None
-        senha_hash = row[4]
-        if not senha_hash:
+        if not row[3] or not self._verificar_senha(senha, row[3]):
             return None
-        if not self._verificar_senha(senha, senha_hash):
-            return None
-        return Aluno(row[0], row[1], row[2], row[3])
+        return Aluno(row[0], row[1], row[2], acesso_liberado=row[4])
 
-    def criar(self, nome: str, matricula: str, turma_id: int, encoding_str: str, senha: str = None) -> Aluno:
+    def criar(self, nome: str, matricula: str, encoding_str: str, senha: str = None) -> 'Aluno':
         conn = conectar()
         cursor = conn.cursor()
         senha_hash = self._hash_senha(senha) if senha else None
         cursor.execute(
-            "INSERT INTO alunos (nome, matricula, turma_id, encoding, senha) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (nome, matricula, turma_id, encoding_str, senha_hash)
+            """INSERT INTO alunos (nome, matricula, encoding, senha, acesso_liberado)
+               VALUES (%s, %s, %s, %s, FALSE) RETURNING id""",
+            (nome, matricula, encoding_str, senha_hash)
         )
         aluno_id = cursor.fetchone()[0]
         conn.commit()
         cursor.close()
         conn.close()
-        return Aluno(aluno_id, nome, matricula, turma_id)
+        return Aluno(aluno_id, nome, matricula, acesso_liberado=False)
+
+    def liberar_acesso(self, matricula: str):
+        """Admin libera acesso pelo RGA do aluno."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE alunos SET acesso_liberado = TRUE WHERE matricula = %s RETURNING id, nome",
+            (matricula,)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return row
+
+    def revogar_acesso(self, matricula: str):
+        """Admin revoga acesso pelo RGA do aluno."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE alunos SET acesso_liberado = FALSE WHERE matricula = %s RETURNING id, nome",
+            (matricula,)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return row
 
     def deletar(self, aluno_id: int):
         conn = conectar()
