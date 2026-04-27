@@ -51,14 +51,7 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            {
-                "nome": r[0],
-                "matricula": r[1],
-                "data": str(r[2]),
-                "hora": str(r[3]),
-                "status": r[4],
-                "confianca": r[5]
-            }
+            {"nome": r[0], "matricula": r[1], "data": str(r[2]), "hora": str(r[3]), "status": r[4], "confianca": r[5]}
             for r in rows
         ]
 
@@ -76,12 +69,25 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            {
-                "nome": r[0],
-                "matricula": r[1],
-                "hora": str(r[2]),
-                "status": r[3],
-                "confianca": r[4]
-            }
+            {"nome": r[0], "matricula": r[1], "hora": str(r[2]), "status": r[3], "confianca": r[4]}
+            for r in rows
+        ]
+
+    def listar_por_data(self, data: str):
+        """Retorna acessos de uma data específica (formato YYYY-MM-DD)."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.nome, u.matricula, a.hora, a.status, a.confianca
+            FROM acessos a
+            LEFT JOIN alunos u ON u.id = a.usuario_id
+            WHERE a.data = %s
+            ORDER BY a.hora DESC
+        """, (data,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [
+            {"nome": r[0] or "Desconhecido", "matricula": r[1] or "-", "hora": str(r[2]), "status": r[3], "confianca": r[4]}
             for r in rows
         ]

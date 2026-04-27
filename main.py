@@ -20,9 +20,6 @@ professor_repo = ProfessorRepository()
 reconhecimento_service = ReconhecimentoService()
 
 
-# ============================================================
-# RAIZ
-# ============================================================
 @app.get("/")
 def inicio():
     return {"mensagem": "CheckFace API funcionando", "versao": "3.0.0"}
@@ -93,11 +90,10 @@ def deletar_usuario(usuario_id: int):
 
 
 # ============================================================
-# CONTROLE DE ACESSO — ADMIN
+# ADMIN
 # ============================================================
 @app.post("/admin/liberar_acesso")
 def liberar_acesso(matricula: str = Form(...)):
-    """Admin libera acesso pelo RGA do usuário."""
     row = usuario_repo.liberar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
@@ -106,7 +102,6 @@ def liberar_acesso(matricula: str = Form(...)):
 
 @app.post("/admin/revogar_acesso")
 def revogar_acesso(matricula: str = Form(...)):
-    """Admin revoga acesso pelo RGA do usuário."""
     row = usuario_repo.revogar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
@@ -141,6 +136,12 @@ def listar_acessos():
 @app.get("/acessos/hoje")
 def acessos_hoje():
     return acesso_repo.listar_hoje()
+
+
+@app.get("/acessos/data/{data}")
+def acessos_por_data(data: str):
+    """Retorna acessos de uma data específica. Formato: YYYY-MM-DD"""
+    return acesso_repo.listar_por_data(data)
 
 
 @app.get("/usuarios/{usuario_id}/acessos")
