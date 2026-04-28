@@ -8,8 +8,8 @@ from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
 
 MODELO = "Facenet512"
-TOLERANCIA = 0.40
-DETECTOR = "retinaface"  # Melhor detecção em fotos de baixa qualidade
+TOLERANCIA = 0.60  # Aumentado para compensar diferença entre câmeras
+DETECTOR = "retinaface"
 
 
 class ReconhecimentoService:
@@ -77,9 +77,12 @@ class ReconhecimentoService:
 
         for usuario in usuarios:
             distancia = self._calcular_distancia(encoding_capturado, self.texto_para_encoding(usuario.encoding))
+            print(f"Distancia para {usuario.nome}: {distancia:.4f}")
             if distancia < menor_distancia:
                 menor_distancia = distancia
                 melhor_usuario = usuario
+
+        print(f"Menor distancia: {menor_distancia:.4f} | Tolerancia: {TOLERANCIA}")
 
         if melhor_usuario is None or menor_distancia > TOLERANCIA:
             self.acesso_repo.registrar(None, agora.date(), agora.time(), "negado", 0.0)
