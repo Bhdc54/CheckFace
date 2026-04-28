@@ -7,8 +7,8 @@ from PIL import Image
 from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
 
-MODELO = "Facenet512"
-TOLERANCIA = 0.60  # Aumentado para compensar diferença entre câmeras
+MODELO = "ArcFace"
+TOLERANCIA = 1.10  # Aumentado para compensar diferença entre câmeras
 DETECTOR = "retinaface"
 
 
