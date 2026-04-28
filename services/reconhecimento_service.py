@@ -8,7 +8,8 @@ from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
 
 MODELO = "ArcFace"
-TOLERANCIA = 1.10  # Aumentado para compensar diferença entre câmeras
+TOLERANCIA = 1.10
+DISTANCIA_IDEAL = 0.50  # Distância considerada "perfeita"
 DETECTOR = "retinaface"
 
 
@@ -27,6 +28,17 @@ class ReconhecimentoService:
     def _bytes_para_imagem(self, foto_bytes: bytes) -> np.ndarray:
         imagem = Image.open(io.BytesIO(foto_bytes)).convert("RGB")
         return np.array(imagem)
+
+    def _calcular_confianca(self, distancia: float) -> float:
+        """
+        Normaliza a confiança considerando que:
+        - distancia <= DISTANCIA_IDEAL = 100% de confiança
+        - distancia = TOLERANCIA = 0% de confiança
+        """
+        if distancia <= DISTANCIA_IDEAL:
+            return 1.0
+        confianca = 1.0 - ((distancia - DISTANCIA_IDEAL) / (TOLERANCIA - DISTANCIA_IDEAL))
+        return round(max(0.0, min(1.0, confianca)), 2)
 
     def extrair_encoding(self, foto_bytes: bytes):
         try:
@@ -88,7 +100,7 @@ class ReconhecimentoService:
             self.acesso_repo.registrar(None, agora.date(), agora.time(), "negado", 0.0)
             return {"status": "negado", "mensagem": "Acesso NEGADO — pessoa não cadastrada.", "data": data_str, "hora": hora_str}
 
-        confianca = round(max(0.0, min(1.0, 1 - (menor_distancia / TOLERANCIA))), 2)
+        confianca = self._calcular_confianca(menor_distancia)
 
         if not melhor_usuario.acesso_liberado:
             self.acesso_repo.registrar(melhor_usuario.id, agora.date(), agora.time(), "negado", confianca)
