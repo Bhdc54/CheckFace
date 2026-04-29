@@ -8,7 +8,7 @@ from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
 
 MODELO = "ArcFace"
-TOLERANCIA = 1.10
+TOLERANCIA = 1.50
 DISTANCIA_IDEAL = 0.50  # Distância considerada "perfeita"
 DETECTOR = "retinaface"
 
