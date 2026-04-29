@@ -6,6 +6,22 @@ from database.conectar import conectar
 from models.acesso import Acesso
 
 
+def _formatar_hora(hora) -> str:
+    """Formata hora removendo microssegundos: HH:MM:SS"""
+    return str(hora)[:8] if hora else ""
+
+
+def _formatar_data(data) -> str:
+    """Formata data no padrão DD/MM/YYYY."""
+    if not data:
+        return ""
+    d = str(data)
+    partes = d.split("-")
+    if len(partes) == 3:
+        return f"{partes[2]}/{partes[1]}/{partes[0]}"
+    return d
+
+
 class AcessoRepository:
 
     def registrar(self, usuario_id: int, data, hora, status: str, confianca: float = None) -> Acesso:
@@ -34,7 +50,13 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            Acesso(id=r[0], usuario_id=usuario_id, data=r[1], hora=r[2], status=r[3], confianca=r[4])
+            {
+                "id": r[0],
+                "data": _formatar_data(r[1]),
+                "hora": _formatar_hora(r[2]),
+                "status": r[3],
+                "confianca": r[4]
+            }
             for r in rows
         ]
 
@@ -51,7 +73,14 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            {"nome": r[0], "matricula": r[1], "data": str(r[2]), "hora": str(r[3]), "status": r[4], "confianca": r[5]}
+            {
+                "nome": r[0],
+                "matricula": r[1],
+                "data": _formatar_data(r[2]),
+                "hora": _formatar_hora(r[3]),
+                "status": r[4],
+                "confianca": r[5]
+            }
             for r in rows
         ]
 
@@ -69,7 +98,13 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            {"nome": r[0], "matricula": r[1], "hora": str(r[2]), "status": r[3], "confianca": r[4]}
+            {
+                "nome": r[0],
+                "matricula": r[1],
+                "hora": _formatar_hora(r[2]),
+                "status": r[3],
+                "confianca": r[4]
+            }
             for r in rows
         ]
 
@@ -88,6 +123,12 @@ class AcessoRepository:
         cursor.close()
         conn.close()
         return [
-            {"nome": r[0] or "Desconhecido", "matricula": r[1] or "-", "hora": str(r[2]), "status": r[3], "confianca": r[4]}
+            {
+                "nome": r[0] or "Desconhecido",
+                "matricula": r[1] or "-",
+                "hora": _formatar_hora(r[2]),
+                "status": r[3],
+                "confianca": r[4]
+            }
             for r in rows
         ]
