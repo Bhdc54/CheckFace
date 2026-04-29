@@ -3,6 +3,8 @@ import numpy as np
 from datetime import datetime
 from deepface import DeepFace
 from PIL import Image
+from datetime import datetime
+import pytz
 
 from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
@@ -64,7 +66,8 @@ class ReconhecimentoService:
         return float(np.linalg.norm(enc1 - enc2))
 
     def reconhecer(self, foto_bytes: bytes) -> dict:
-        agora = datetime.now()
+        fuso = pytz.timezone('America/Cuiaba')
+        agora = datetime.now(fuso)
         data_str = agora.strftime("%d/%m/%Y")
         hora_str = agora.strftime("%H:%M:%S")
 
