@@ -90,6 +90,55 @@ def deletar_usuario(usuario_id: int):
 
 
 # ============================================================
+# RECUPERAÇÃO DE SENHA
+# ============================================================
+@app.post("/usuarios/recuperar_senha")
+async def recuperar_senha(
+    matricula: str = Form(...),
+    nova_senha: str = Form(...),
+    foto: UploadFile = File(...)
+):
+    # 1. Busca o usuário pelo RGA
+    usuario = usuario_repo.buscar_por_matricula_completo(matricula)
+    if not usuario:
+        raise HTTPException(status_code=404, detail="RGA não encontrado.")
+    if not usuario.encoding:
+        raise HTTPException(status_code=400, detail="Usuário sem foto cadastrada.")
+
+    # 2. Extrai encoding da foto enviada
+    conteudo = await foto.read()
+    encoding_novo, erro = reconhecimento_service.extrair_encoding(conteudo)
+    if erro == "sem_rosto":
+        raise HTTPException(status_code=400, detail="Nenhum rosto detectado na foto.")
+    if erro == "multiplos_rostos":
+        raise HTTPException(status_code=400, detail="Mais de um rosto detectado.")
+
+    # 3. Compara com o encoding cadastrado
+    import numpy as np
+    encoding_cadastrado = reconhecimento_service.texto_para_encoding(usuario.encoding)
+    distancia = reconhecimento_service._calcular_distancia(encoding_novo, encoding_cadastrado)
+    print(f"Recuperação de senha — distância facial: {distancia:.4f}")
+
+    # 4. Verifica se é a mesma pessoa (usa mesma tolerância do reconhecimento)
+    TOLERANCIA = 1.10
+    if distancia > TOLERANCIA:
+        raise HTTPException(
+            status_code=401,
+            detail="Rosto não corresponde ao cadastro. Não foi possível verificar sua identidade."
+        )
+
+    # 5. Redefine a senha
+    sucesso = usuario_repo.redefinir_senha(matricula, nova_senha)
+    if not sucesso:
+        raise HTTPException(status_code=500, detail="Erro ao redefinir senha.")
+
+    return {
+        "mensagem": f"Senha redefinida com sucesso para {usuario.nome}!",
+        "nome": usuario.nome
+    }
+
+
+# ============================================================
 # ADMIN
 # ============================================================
 @app.post("/admin/liberar_acesso")
@@ -140,7 +189,6 @@ def acessos_hoje():
 
 @app.get("/acessos/data/{data}")
 def acessos_por_data(data: str):
-    """Retorna acessos de uma data específica. Formato: YYYY-MM-DD"""
     return acesso_repo.listar_por_data(data)
 
 

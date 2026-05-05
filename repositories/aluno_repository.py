@@ -20,8 +20,7 @@ class AlunoRepository:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, nome, matricula, encoding, acesso_liberado
-            FROM alunos
-            ORDER BY nome
+            FROM alunos ORDER BY nome
         """)
         rows = cursor.fetchall()
         cursor.close()
@@ -45,6 +44,21 @@ class AlunoRepository:
         cursor.close()
         conn.close()
         return row
+
+    def buscar_por_matricula_completo(self, matricula: str):
+        """Retorna o aluno completo com encoding para verificação facial."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, nome, matricula, encoding, acesso_liberado FROM alunos WHERE matricula = %s",
+            (matricula,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return None
+        return Aluno(row[0], row[1], row[2], encoding=row[3], acesso_liberado=row[4])
 
     def buscar_por_matricula_e_senha(self, matricula: str, senha: str):
         conn = conectar()
@@ -77,8 +91,22 @@ class AlunoRepository:
         conn.close()
         return Aluno(aluno_id, nome, matricula, acesso_liberado=False)
 
+    def redefinir_senha(self, matricula: str, nova_senha: str) -> bool:
+        """Redefine a senha do usuário após verificação facial."""
+        conn = conectar()
+        cursor = conn.cursor()
+        senha_hash = self._hash_senha(nova_senha)
+        cursor.execute(
+            "UPDATE alunos SET senha = %s WHERE matricula = %s RETURNING id",
+            (senha_hash, matricula)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return row is not None
+
     def liberar_acesso(self, matricula: str):
-        """Admin libera acesso pelo RGA do aluno."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
@@ -92,7 +120,6 @@ class AlunoRepository:
         return row
 
     def revogar_acesso(self, matricula: str):
-        """Admin revoga acesso pelo RGA do aluno."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
