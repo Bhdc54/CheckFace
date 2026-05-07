@@ -15,13 +15,14 @@ class ProfessorRepository:
     def _verificar_senha(self, senha: str, hash_salvo: str) -> bool:
         return bcrypt.checkpw(senha.encode('utf-8'), hash_salvo.encode('utf-8'))
 
-    def criar(self, nome: str, siape: str, senha: str) -> Professor:
+    def criar(self, nome: str, siape: str, senha: str, encoding_str: str = None) -> Professor:
         conn = conectar()
         cursor = conn.cursor()
         senha_hash = self._hash_senha(senha)
         cursor.execute(
-            "INSERT INTO professores (nome, siape, senha) VALUES (%s, %s, %s) RETURNING id, criado_em",
-            (nome, siape, senha_hash)
+            """INSERT INTO professores (nome, siape, senha, encoding)
+               VALUES (%s, %s, %s, %s) RETURNING id, criado_em""",
+            (nome, siape, senha_hash, encoding_str)
         )
         row = cursor.fetchone()
         conn.commit()
@@ -33,7 +34,7 @@ class ProfessorRepository:
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, nome, siape, senha FROM professores WHERE siape = %s",
+            "SELECT id, nome, siape, senha, encoding FROM professores WHERE siape = %s",
             (siape,)
         )
         row = cursor.fetchone()
@@ -41,16 +42,31 @@ class ProfessorRepository:
         conn.close()
         if not row:
             return None
-        return Professor(row[0], row[1], row[2], row[3])
+        p = Professor(row[0], row[1], row[2], row[3])
+        p.encoding = row[4]
+        return p
 
     def verificar_login(self, siape: str, senha: str):
-        """Busca professor e verifica senha com bcrypt."""
         professor = self.buscar_por_siape(siape)
         if not professor:
             return None
         if not self._verificar_senha(senha, professor.senha):
             return None
         return professor
+
+    def redefinir_senha(self, siape: str, nova_senha: str) -> bool:
+        conn = conectar()
+        cursor = conn.cursor()
+        senha_hash = self._hash_senha(nova_senha)
+        cursor.execute(
+            "UPDATE professores SET senha = %s WHERE siape = %s RETURNING id",
+            (senha_hash, siape)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return row is not None
 
     def listar(self):
         conn = conectar()
@@ -60,40 +76,3 @@ class ProfessorRepository:
         cursor.close()
         conn.close()
         return [Professor(r[0], r[1], r[2], criado_em=r[3]) for r in rows]
-
-    def vincular_turma(self, professor_id: int, turma_id: int):
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO professor_turmas (professor_id, turma_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (professor_id, turma_id)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-    def desvincular_turma(self, professor_id: int, turma_id: int):
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM professor_turmas WHERE professor_id = %s AND turma_id = %s",
-            (professor_id, turma_id)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-    def listar_turmas_do_professor(self, professor_id: int):
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT t.id, t.nome, t.professor
-            FROM turmas t
-            JOIN professor_turmas pt ON pt.turma_id = t.id
-            WHERE pt.professor_id = %s
-            ORDER BY t.nome
-        """, (professor_id,))
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return [{"id": r[0], "nome": r[1], "professor": r[2]} for r in rows]
