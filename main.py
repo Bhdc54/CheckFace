@@ -3,6 +3,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from repositories.aluno_repository import AlunoRepository
 from repositories.acesso_repository import AcessoRepository
@@ -14,9 +15,9 @@ app = FastAPI(
     version="3.0.0"
 )
 
-usuario_repo = AlunoRepository()
-acesso_repo = AcessoRepository()
-professor_repo = ProfessorRepository()
+usuario_repo           = AlunoRepository()
+acesso_repo            = AcessoRepository()
+professor_repo         = ProfessorRepository()
 reconhecimento_service = ReconhecimentoService()
 
 
@@ -28,17 +29,18 @@ def inicio():
 # ============================================================
 # LOGIN
 # ============================================================
+
 @app.post("/login/usuario")
 def login_usuario(matricula: str = Form(...), senha: str = Form(...)):
     usuario = usuario_repo.buscar_por_matricula_e_senha(matricula, senha)
     if not usuario:
         raise HTTPException(status_code=401, detail="Matrícula ou senha inválidos.")
     return {
-        "tipo": "usuario",
-        "id": usuario.id,
-        "nome": usuario.nome,
-        "matricula": usuario.matricula,
-        "acesso_liberado": usuario.acesso_liberado
+        "tipo":            "usuario",
+        "id":              usuario.id,
+        "nome":            usuario.nome,
+        "matricula":       usuario.matricula,
+        "acesso_liberado": usuario.acesso_liberado,
     }
 
 
@@ -53,6 +55,7 @@ def login_admin(siape: str = Form(...), senha: str = Form(...)):
 # ============================================================
 # USUÁRIOS
 # ============================================================
+
 @app.get("/usuarios")
 def listar_usuarios():
     return [u.to_dict() for u in usuario_repo.listar()]
@@ -60,43 +63,52 @@ def listar_usuarios():
 
 @app.post("/usuarios/cadastrar")
 async def cadastrar_usuario(
-    nome: str = Form(...),
-    matricula: str = Form(...),
-    senha: str = Form(...),
-    foto: UploadFile = File(...)
+    nome:      str        = Form(...),
+    matricula: str        = Form(...),
+    senha:     str        = Form(...),
+    foto:      UploadFile = File(...)
 ):
     conteudo = await foto.read()
+
     encoding, erro = reconhecimento_service.extrair_encoding(conteudo)
     if erro == "sem_rosto":
         raise HTTPException(status_code=400, detail="Nenhum rosto detectado na foto.")
     if erro == "multiplos_rostos":
         raise HTTPException(status_code=400, detail="Mais de um rosto detectado. Envie foto individual.")
+
     if usuario_repo.buscar_por_matricula(matricula):
         raise HTTPException(status_code=409, detail="Matrícula já cadastrada.")
+
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
-    usuario = usuario_repo.criar(nome, matricula, encoding_str, senha)
+    usuario      = usuario_repo.criar(nome, matricula, encoding_str, senha)
+
+    # Novo aluno cadastrado — invalida o cache de embeddings
+    reconhecimento_service.invalidar_cache()
+
     return {
-        "id": usuario.id,
-        "nome": usuario.nome,
+        "id":        usuario.id,
+        "nome":      usuario.nome,
         "matricula": usuario.matricula,
-        "mensagem": "Cadastro realizado! Aguarde liberação do administrador."
+        "mensagem":  "Cadastro realizado! Aguarde liberação do administrador.",
     }
 
 
 @app.delete("/usuarios/{usuario_id}")
 def deletar_usuario(usuario_id: int):
     usuario_repo.deletar(usuario_id)
+    reconhecimento_service.invalidar_cache()
     return {"mensagem": "Usuário removido."}
 
 
 # ============================================================
 # RECUPERAÇÃO DE SENHA — USUÁRIO
 # ============================================================
+
 @app.post("/usuarios/recuperar_senha")
 async def recuperar_senha_usuario(
-    matricula: str = Form(...),
-    nova_senha: str = Form(...),
-    foto: UploadFile = File(...)
+    matricula:  str        = Form(...),
+    nova_senha: str        = Form(...),
+    foto:       UploadFile = File(...)
 ):
     usuario = usuario_repo.buscar_por_matricula_completo(matricula)
     if not usuario:
@@ -111,19 +123,14 @@ async def recuperar_senha_usuario(
     if erro == "multiplos_rostos":
         raise HTTPException(status_code=400, detail="Mais de um rosto detectado.")
 
-    import numpy as np
     encoding_cadastrado = reconhecimento_service.texto_para_encoding(usuario.encoding)
     distancia = reconhecimento_service._calcular_distancia(encoding_novo, encoding_cadastrado)
-    print(f"Recuperação de senha (usuário) — distância: {distancia:.4f}")
+    print(f"Recuperacao de senha (usuario) — distancia: {distancia:.4f}")
 
     if distancia > 2.0:
-        raise HTTPException(
-            status_code=401,
-            detail="Rosto não corresponde ao cadastro."
-        )
+        raise HTTPException(status_code=401, detail="Rosto não corresponde ao cadastro.")
 
-    sucesso = usuario_repo.redefinir_senha(matricula, nova_senha)
-    if not sucesso:
+    if not usuario_repo.redefinir_senha(matricula, nova_senha):
         raise HTTPException(status_code=500, detail="Erro ao redefinir senha.")
 
     return {"mensagem": f"Senha redefinida com sucesso para {usuario.nome}!", "nome": usuario.nome}
@@ -132,11 +139,12 @@ async def recuperar_senha_usuario(
 # ============================================================
 # RECUPERAÇÃO DE SENHA — PROFESSOR
 # ============================================================
+
 @app.post("/admin/recuperar_senha")
 async def recuperar_senha_professor(
-    siape: str = Form(...),
-    nova_senha: str = Form(...),
-    foto: UploadFile = File(...)
+    siape:      str        = Form(...),
+    nova_senha: str        = Form(...),
+    foto:       UploadFile = File(...)
 ):
     professor = professor_repo.buscar_por_siape(siape)
     if not professor:
@@ -151,19 +159,14 @@ async def recuperar_senha_professor(
     if erro == "multiplos_rostos":
         raise HTTPException(status_code=400, detail="Mais de um rosto detectado.")
 
-    import numpy as np
     encoding_cadastrado = reconhecimento_service.texto_para_encoding(professor.encoding)
     distancia = reconhecimento_service._calcular_distancia(encoding_novo, encoding_cadastrado)
-    print(f"Recuperação de senha (professor) — distância: {distancia:.4f}")
+    print(f"Recuperacao de senha (professor) — distancia: {distancia:.4f}")
 
     if distancia > 2.0:
-        raise HTTPException(
-            status_code=401,
-            detail="Rosto não corresponde ao cadastro."
-        )
+        raise HTTPException(status_code=401, detail="Rosto não corresponde ao cadastro.")
 
-    sucesso = professor_repo.redefinir_senha(siape, nova_senha)
-    if not sucesso:
+    if not professor_repo.redefinir_senha(siape, nova_senha):
         raise HTTPException(status_code=500, detail="Erro ao redefinir senha.")
 
     return {"mensagem": f"Senha redefinida com sucesso para {professor.nome}!", "nome": professor.nome}
@@ -172,11 +175,14 @@ async def recuperar_senha_professor(
 # ============================================================
 # ADMIN
 # ============================================================
+
 @app.post("/admin/liberar_acesso")
 def liberar_acesso(matricula: str = Form(...)):
     row = usuario_repo.liberar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    # Permissão alterada — invalida o cache de embeddings
+    reconhecimento_service.invalidar_cache()
     return {"mensagem": f"Acesso liberado para {row[1]}!"}
 
 
@@ -185,15 +191,17 @@ def revogar_acesso(matricula: str = Form(...)):
     row = usuario_repo.revogar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    # Permissão alterada — invalida o cache de embeddings
+    reconhecimento_service.invalidar_cache()
     return {"mensagem": f"Acesso revogado para {row[1]}."}
 
 
 @app.post("/admin/cadastrar")
 async def cadastrar_admin(
-    nome: str = Form(...),
-    siape: str = Form(...),
-    senha: str = Form(...),
-    foto: UploadFile = File(...)
+    nome:  str        = Form(...),
+    siape: str        = Form(...),
+    senha: str        = Form(...),
+    foto:  UploadFile = File(...)
 ):
     if professor_repo.buscar_por_siape(siape):
         raise HTTPException(status_code=409, detail="SIAPE já cadastrado.")
@@ -206,13 +214,18 @@ async def cadastrar_admin(
         raise HTTPException(status_code=400, detail="Mais de um rosto detectado. Envie foto individual.")
 
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
-    admin = professor_repo.criar(nome, siape, senha, encoding_str)
+    admin        = professor_repo.criar(nome, siape, senha, encoding_str)
+
+    # Novo professor cadastrado — invalida o cache de embeddings
+    reconhecimento_service.invalidar_cache()
+
     return {"id": admin.id, "nome": admin.nome, "mensagem": "Professor cadastrado com sucesso!"}
 
 
 # ============================================================
 # RECONHECIMENTO
 # ============================================================
+
 @app.post("/reconhecer")
 async def reconhecer(foto: UploadFile = File(...)):
     conteudo = await foto.read()
@@ -222,6 +235,7 @@ async def reconhecer(foto: UploadFile = File(...)):
 # ============================================================
 # ACESSOS
 # ============================================================
+
 @app.get("/acessos")
 def listar_acessos():
     return acesso_repo.listar_todos()

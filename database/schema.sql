@@ -1,74 +1,68 @@
 -- ============================================================
--- CheckFace - Schema do banco de dados
+-- CheckFace: Sistema Integrado de Gestão e Controle de Acesso
+-- via Reconhecimento Facial em Tempo Real
+-- Schema do banco de dados — versão 3.0.0
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS turmas (
-    id          SERIAL PRIMARY KEY,
-    nome        VARCHAR(100) NOT NULL,
-    professor   VARCHAR(120) NOT NULL,
-    criado_em   TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS salas (
-    id          SERIAL PRIMARY KEY,
-    nome        VARCHAR(80) NOT NULL,
-    descricao   TEXT,
-    criado_em   TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS alunos (
-    id          SERIAL PRIMARY KEY,
-    nome        VARCHAR(120) NOT NULL,
-    matricula   VARCHAR(30) UNIQUE NOT NULL,
-    turma_id    INT REFERENCES turmas(id) ON DELETE SET NULL,
-    encoding    TEXT,          -- vetor facial serializado (128 floats separados por vírgula)
-    foto_url    TEXT,
-    criado_em   TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS aulas (
-    id              SERIAL PRIMARY KEY,
-    turma_id        INT REFERENCES turmas(id) ON DELETE CASCADE,
-    sala_id         INT REFERENCES salas(id) ON DELETE SET NULL,
-    iniciada_em     TIMESTAMP DEFAULT NOW(),
-    finalizada_em   TIMESTAMP,
-    relatorio_path  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS presencas (
-    id              SERIAL PRIMARY KEY,
-    aluno_id        INT REFERENCES alunos(id) ON DELETE CASCADE,
-    aula_id         INT REFERENCES aulas(id) ON DELETE CASCADE,
-    data            DATE NOT NULL,
-    hora            TIME NOT NULL,
-    confianca       FLOAT,     -- 0.0 a 1.0 (quanto maior, mais certeza)
-    UNIQUE(aluno_id, aula_id) -- evita duplicata na mesma aula
-);
-
 -- ============================================================
--- CheckFace - Tabela de Professores
+-- PROFESSORES
+-- Administradores do sistema que gerenciam os acessos
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS professores (
     id          SERIAL PRIMARY KEY,
     nome        VARCHAR(120) NOT NULL,
     siape       VARCHAR(30) UNIQUE NOT NULL,
-    senha       VARCHAR(255) NOT NULL,
+    senha       VARCHAR(255) NOT NULL,          -- hash bcrypt
+    encoding    TEXT,                           -- embedding facial (512 floats)
     criado_em   TIMESTAMP DEFAULT NOW()
 );
 
--- Tabela de vínculo entre professor e turma (um professor pode ter várias turmas)
-CREATE TABLE IF NOT EXISTS professor_turmas (
-    id              SERIAL PRIMARY KEY,
-    professor_id    INT REFERENCES professores(id) ON DELETE CASCADE,
-    turma_id        INT REFERENCES turmas(id) ON DELETE CASCADE,
-    UNIQUE(professor_id, turma_id)
+-- ============================================================
+-- ALUNOS (USUÁRIOS)
+-- Usuários que se cadastram pelo app e aguardam liberação
+-- ============================================================
+CREATE TABLE IF NOT EXISTS alunos (
+    id               SERIAL PRIMARY KEY,
+    nome             VARCHAR(120) NOT NULL,
+    matricula        VARCHAR(30) UNIQUE NOT NULL, -- RGA
+    senha            VARCHAR(255),                -- hash bcrypt
+    encoding         TEXT,                        -- embedding facial (512 floats)
+    foto_url         TEXT,
+    acesso_liberado  BOOLEAN DEFAULT FALSE,       -- liberado pelo professor
+    criado_em        TIMESTAMP DEFAULT NOW()
 );
 
--- Adicionar senha na tabela de alunos (se ainda não tiver)
+-- ============================================================
+-- ACESSOS
+-- Registro de todas as tentativas de acesso pelo totem
+-- ============================================================
+CREATE TABLE IF NOT EXISTS acessos (
+    id          SERIAL PRIMARY KEY,
+    usuario_id  INT REFERENCES alunos(id) ON DELETE SET NULL,
+    data        DATE NOT NULL,
+    hora        TIME NOT NULL,
+    status      VARCHAR(10) NOT NULL CHECK (status IN ('liberado', 'negado')),
+    confianca   FLOAT,                           -- 0.0 a 1.0
+    criado_em   TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================================
+-- ÍNDICES para melhorar performance das consultas
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_acessos_data ON acessos (data);
+CREATE INDEX IF NOT EXISTS idx_acessos_usuario ON acessos (usuario_id);
+CREATE INDEX IF NOT EXISTS idx_alunos_matricula ON alunos (matricula);
+CREATE INDEX IF NOT EXISTS idx_professores_siape ON professores (siape);
+
+-- ============================================================
+-- MIGRAÇÕES (caso o banco já exista, aplique estes ALTER)
+-- ============================================================
+
+-- Adicionar encoding nos professores (caso não exista)
+ALTER TABLE professores ADD COLUMN IF NOT EXISTS encoding TEXT;
+
+-- Adicionar acesso_liberado nos alunos (caso não exista)
+ALTER TABLE alunos ADD COLUMN IF NOT EXISTS acesso_liberado BOOLEAN DEFAULT FALSE;
+
+-- Adicionar senha nos alunos (caso não exista)
 ALTER TABLE alunos ADD COLUMN IF NOT EXISTS senha VARCHAR(255);
-
--- Adicionar sala_id na tabela de aulas (se ainda não tiver)
-ALTER TABLE aulas ADD COLUMN IF NOT EXISTS sala_id INT REFERENCES salas(id) ON DELETE SET NULL;
-
--- Salas padrão

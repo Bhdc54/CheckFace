@@ -76,3 +76,25 @@ class ProfessorRepository:
         cursor.close()
         conn.close()
         return [Professor(r[0], r[1], r[2], criado_em=r[3]) for r in rows]
+
+    def listar_com_encoding(self):
+        """Retorna todos os professores que possuem encoding cadastrado."""
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT id, nome, siape, encoding
+               FROM professores
+               WHERE encoding IS NOT NULL
+               ORDER BY nome"""
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        resultado = []
+        for r in rows:
+            p = Professor(r[0], r[1], r[2])
+            p.encoding        = r[3]
+            p.acesso_liberado = True  # professores sempre têm acesso liberado
+            p.matricula       = r[2]  # usa o SIAPE como identificador único
+            resultado.append(p)
+        return resultado
