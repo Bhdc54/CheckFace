@@ -261,6 +261,14 @@ async def log_totem(dados: dict):
     print(f"[TOTEM] {mensagem}")
     return {"ok": True}
 
+@app.get("/debug/redis")
+async def debug_redis():
+    from services.cache_service import CacheService
+    cache = CacheService()
+    return {
+        "disponivel": cache.disponivel,
+        "redis_url_presente": bool(os.environ.get("REDIS_URL"))
+    }
 
 if __name__ == "__main__":
     import uvicorn
