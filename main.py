@@ -255,6 +255,12 @@ def acessos_por_data(data: str):
 def historico_usuario(usuario_id: int):
     return acesso_repo.listar_por_usuario(usuario_id)
 
+@app.post("/log_totem")
+async def log_totem(dados: dict):
+    mensagem = dados.get("mensagem", "")
+    print(f"[TOTEM] {mensagem}")
+    return {"ok": True}
+
 
 if __name__ == "__main__":
     import uvicorn
