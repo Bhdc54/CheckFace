@@ -155,7 +155,6 @@ class ReconhecimentoService:
         matricula       = melhor_usuario["matricula"]       if isinstance(melhor_usuario, dict) else melhor_usuario.matricula
         usuario_id      = melhor_usuario["id"]              if isinstance(melhor_usuario, dict) else melhor_usuario.id
 
-        # Detecta se é professor verificando se tem siape
         if isinstance(melhor_usuario, dict):
             tipo_usuario = "professor" if melhor_usuario.get("siape") else "aluno"
         else:
@@ -164,20 +163,28 @@ class ReconhecimentoService:
         # 6. Verifica permissão
         if not acesso_liberado:
             self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "negado", confianca, tipo_usuario)
-            resposta = {"status": "negado", "mensagem": f"Acesso NEGADO — {nome} nao tem permissao.", "nome": nome, "data": data_str, "hora": hora_str}
+            resposta = {
+                "status":       "negado",
+                "mensagem":     f"Acesso NEGADO — {nome} nao tem permissao.",
+                "nome":         nome,
+                "tipo_usuario": tipo_usuario,
+                "data":         data_str,
+                "hora":         hora_str,
+            }
             self.cache.salvar_resultado(encoding_capturado, resposta)
             return resposta
 
         # 7. Registra acesso liberado
         self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "liberado", confianca, tipo_usuario)
         resposta = {
-            "status":    "liberado",
-            "mensagem":  f"Acesso LIBERADO — Bem-vindo, {nome}!",
-            "nome":      nome,
-            "matricula": matricula,
-            "confianca": confianca,
-            "data":      data_str,
-            "hora":      hora_str,
+            "status":       "liberado",
+            "mensagem":     f"Acesso LIBERADO — Bem-vindo, {nome}!",
+            "nome":         nome,
+            "matricula":    matricula,
+            "confianca":    confianca,
+            "tipo_usuario": tipo_usuario,
+            "data":         data_str,
+            "hora":         hora_str,
         }
         self.cache.salvar_resultado(encoding_capturado, resposta)
         return resposta
