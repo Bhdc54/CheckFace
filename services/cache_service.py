@@ -5,7 +5,6 @@ import threading
 import numpy as np
 import redis
 
-# TTL = tempo em segundos que o dado permanece no cache
 TTL_EMBEDDINGS = 300  # 5 minutos
 TTL_RESULTADO  = 30   # 30 segundos
 
@@ -14,18 +13,12 @@ KEY_RESULTADO  = "checkface:resultado:{hash}"
 
 
 class CacheService:
-    """
-    Gerencia o cache Redis em duas camadas:
-    - Camada 1: lista de todos os usuários (alunos + professores) e embeddings
-    - Camada 2: resultado do reconhecimento por rosto
-    """
 
     def __init__(self):
         self._cliente = self._conectar()
         self._lock    = threading.Lock()
 
     def _conectar(self):
-        # REDIS_URL é definida automaticamente pelo Railway ao adicionar o serviço Redis
         url = os.getenv("REDIS_URL", "redis://localhost:6379")
         try:
             cliente = redis.from_url(url, decode_responses=True)
@@ -56,28 +49,38 @@ class CacheService:
     def salvar_embeddings(self, usuarios: list):
         """
         Serializa e salva a lista unificada de alunos e professores.
-        Espera objetos com os atributos: id, nome, matricula, encoding, acesso_liberado.
+        Suporta tanto objetos (alunos) quanto dicts (professores).
         """
         if not self.disponivel:
             return
         with self._lock:
             try:
-                dados = json.dumps([
-                    {
-                        "id":              u.id,
-                        "nome":            u.nome,
-                        "matricula":       u.matricula,
-                        "encoding":        u.encoding,
-                        "acesso_liberado": u.acesso_liberado,
-                    }
-                    for u in usuarios
-                ])
+                def _extrair(u):
+                    if isinstance(u, dict):
+                        return {
+                            "id":              u.get("id"),
+                            "nome":            u.get("nome"),
+                            "matricula":       u.get("matricula"),
+                            "siape":           u.get("siape"),
+                            "encoding":        u.get("encoding"),
+                            "acesso_liberado": u.get("acesso_liberado", True),
+                        }
+                    else:
+                        return {
+                            "id":              u.id,
+                            "nome":            u.nome,
+                            "matricula":       u.matricula,
+                            "siape":           getattr(u, "siape", None),
+                            "encoding":        u.encoding,
+                            "acesso_liberado": u.acesso_liberado,
+                        }
+
+                dados = json.dumps([_extrair(u) for u in usuarios])
                 self._cliente.setex(KEY_EMBEDDINGS, TTL_EMBEDDINGS, dados)
             except Exception as e:
                 print(f"Erro ao salvar cache de embeddings: {e}")
 
     def invalidar_embeddings(self):
-        # Chame após cadastrar, editar ou alterar permissão de qualquer usuário
         if not self.disponivel:
             return
         try:
@@ -88,7 +91,6 @@ class CacheService:
     # ------ Camada 2: resultado ------
 
     def _chave_resultado(self, encoding: np.ndarray) -> str:
-        # Usa os 8 primeiros valores do embedding como chave única
         return KEY_RESULTADO.format(
             hash="_".join(f"{v:.2f}" for v in encoding[:8])
         )
