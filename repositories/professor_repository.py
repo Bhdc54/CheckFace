@@ -80,6 +80,7 @@ class ProfessorRepository:
         return [Professor(r[0], r[1], r[2], criado_em=r[3]) for r in rows]
 
     def listar_com_encoding(self):
+        """Retorna professores como dicts compatíveis com o formato dos alunos."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
@@ -91,11 +92,14 @@ class ProfessorRepository:
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        resultado = []
-        for r in rows:
-            p = Professor(r[0], r[1], r[2])
-            p.encoding        = r[3]
-            p.acesso_liberado = True
-            p.matricula       = r[2]
-            resultado.append(p)
-        return resultado
+        return [
+            {
+                "id":              r[0],
+                "nome":            r[1],
+                "matricula":       r[2],  # siape usado como matricula
+                "siape":           r[2],  # campo siape para deteccao de tipo
+                "encoding":        r[3],
+                "acesso_liberado": True,  # professores sempre têm acesso
+            }
+            for r in rows
+        ]
