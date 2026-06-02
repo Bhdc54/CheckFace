@@ -1,6 +1,7 @@
 import sys
 import os
 import bcrypt
+from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.conectar import conectar
@@ -20,9 +21,10 @@ class ProfessorRepository:
         cursor = conn.cursor()
         senha_hash = self._hash_senha(senha)
         cursor.execute(
-            """INSERT INTO professores (nome, siape, senha, encoding)
-               VALUES (%s, %s, %s, %s) RETURNING id, criado_em""",
-            (nome, siape, senha_hash, encoding_str)
+            """INSERT INTO professores (nome, siape, senha, encoding,
+               termo_aceito, termo_aceito_em)
+               VALUES (%s, %s, %s, %s, TRUE, %s) RETURNING id, criado_em""",
+            (nome, siape, senha_hash, encoding_str, datetime.now())
         )
         row = cursor.fetchone()
         conn.commit()
@@ -78,7 +80,6 @@ class ProfessorRepository:
         return [Professor(r[0], r[1], r[2], criado_em=r[3]) for r in rows]
 
     def listar_com_encoding(self):
-        """Retorna todos os professores que possuem encoding cadastrado."""
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
@@ -94,7 +95,7 @@ class ProfessorRepository:
         for r in rows:
             p = Professor(r[0], r[1], r[2])
             p.encoding        = r[3]
-            p.acesso_liberado = True  # professores sempre têm acesso liberado
-            p.matricula       = r[2]  # usa o SIAPE como identificador único
+            p.acesso_liberado = True
+            p.matricula       = r[2]
             resultado.append(p)
         return resultado
