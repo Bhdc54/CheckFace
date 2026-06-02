@@ -53,19 +53,13 @@ class ReconhecimentoService:
     # ------ Usuários com cache ------
 
     def _get_usuarios(self) -> list:
-        """
-        Retorna a lista unificada de alunos e professores com embeddings.
-        Professores sempre têm acesso_liberado = True.
-        Prioriza o cache Redis; se não tiver, busca no banco e salva no cache.
-        """
         usuarios = self.cache.get_embeddings()
         if usuarios:
             return usuarios
 
-        # Cache MISS: busca alunos e professores do banco e unifica
-        alunos     = self.usuario_repo.listar_com_encoding()
+        alunos      = self.usuario_repo.listar_com_encoding()
         professores = self.professor_repo.listar_com_encoding()
-        todos      = alunos + professores
+        todos       = alunos + professores
 
         self.cache.salvar_embeddings(todos)
         return todos
@@ -121,14 +115,14 @@ class ReconhecimentoService:
             print(f"Erro: {e}")
             return {"status": "negado", "mensagem": "Acesso NEGADO — erro no processamento.", "data": data_str, "hora": hora_str}
 
-        # 2. Verifica se este rosto já foi reconhecido nos últimos 30s (Camada 2)
+        # 2. Verifica cache de resultado (Camada 2)
         resultado_cacheado = self.cache.get_resultado(encoding_capturado)
         if resultado_cacheado:
             resultado_cacheado["data"] = data_str
             resultado_cacheado["hora"] = hora_str
             return resultado_cacheado
 
-        # 3. Busca alunos + professores do cache Redis ou do banco (Camada 1)
+        # 3. Busca alunos + professores (Camada 1)
         usuarios        = self._get_usuarios()
         melhor_usuario  = None
         menor_distancia = float("inf")
@@ -147,29 +141,35 @@ class ReconhecimentoService:
 
         print(f"Menor distancia: {menor_distancia:.4f} | Tolerancia: {TOLERANCIA}")
 
-        # 4. Verifica se a distância está dentro do limiar
+        # 4. Verifica limiar
         if melhor_usuario is None or menor_distancia > TOLERANCIA:
-            self.acesso_repo.registrar(None, agora.date(), agora.time(), "negado", 0.0)
+            self.acesso_repo.registrar(None, agora.date(), agora.time(), "negado", 0.0, "desconhecido")
             resposta = {"status": "negado", "mensagem": "Acesso NEGADO — pessoa nao cadastrada.", "data": data_str, "hora": hora_str}
             self.cache.salvar_resultado(encoding_capturado, resposta)
             return resposta
 
-        # 5. Verifica se o usuário tem permissão de acesso
-        # Alunos precisam de liberação do professor; professores sempre têm acesso
+        # 5. Determina tipo do usuário reconhecido
         confianca       = self._calcular_confianca(menor_distancia)
         acesso_liberado = melhor_usuario["acesso_liberado"] if isinstance(melhor_usuario, dict) else melhor_usuario.acesso_liberado
         nome            = melhor_usuario["nome"]            if isinstance(melhor_usuario, dict) else melhor_usuario.nome
         matricula       = melhor_usuario["matricula"]       if isinstance(melhor_usuario, dict) else melhor_usuario.matricula
         usuario_id      = melhor_usuario["id"]              if isinstance(melhor_usuario, dict) else melhor_usuario.id
 
+        # Detecta se é professor verificando se tem siape
+        if isinstance(melhor_usuario, dict):
+            tipo_usuario = "professor" if melhor_usuario.get("siape") else "aluno"
+        else:
+            tipo_usuario = "professor" if hasattr(melhor_usuario, "siape") else "aluno"
+
+        # 6. Verifica permissão
         if not acesso_liberado:
-            self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "negado", confianca)
+            self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "negado", confianca, tipo_usuario)
             resposta = {"status": "negado", "mensagem": f"Acesso NEGADO — {nome} nao tem permissao.", "nome": nome, "data": data_str, "hora": hora_str}
             self.cache.salvar_resultado(encoding_capturado, resposta)
             return resposta
 
-        # 6. Registra acesso liberado e retorna resultado
-        self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "liberado", confianca)
+        # 7. Registra acesso liberado
+        self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "liberado", confianca, tipo_usuario)
         resposta = {
             "status":    "liberado",
             "mensagem":  f"Acesso LIBERADO — Bem-vindo, {nome}!",
