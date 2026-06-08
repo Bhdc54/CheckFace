@@ -1,6 +1,7 @@
 import sys
 import os
 import bcrypt
+from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.conectar import conectar
@@ -80,9 +81,10 @@ class AlunoRepository:
         cursor = conn.cursor()
         senha_hash = self._hash_senha(senha) if senha else None
         cursor.execute(
-            """INSERT INTO alunos (nome, matricula, encoding, senha, acesso_liberado)
-               VALUES (%s, %s, %s, %s, FALSE) RETURNING id""",
-            (nome, matricula, encoding_str, senha_hash)
+            """INSERT INTO alunos (nome, matricula, encoding, senha, acesso_liberado,
+               termo_aceito, termo_aceito_em)
+               VALUES (%s, %s, %s, %s, FALSE, TRUE, %s) RETURNING id""",
+            (nome, matricula, encoding_str, senha_hash, datetime.now())
         )
         aluno_id = cursor.fetchone()[0]
         conn.commit()
