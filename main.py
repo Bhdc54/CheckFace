@@ -20,6 +20,9 @@ acesso_repo            = AcessoRepository()
 professor_repo         = ProfessorRepository()
 reconhecimento_service = ReconhecimentoService()
 
+# Limiar restritivo para recuperação de senha:
+TOLERANCIA_RECUPERACAO = 0.8
+
 
 @app.get("/")
 def inicio():
@@ -82,7 +85,6 @@ async def cadastrar_usuario(
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
     usuario      = usuario_repo.criar(nome, matricula, encoding_str, senha)
 
-    # Novo aluno cadastrado — invalida o cache de embeddings
     reconhecimento_service.invalidar_cache()
 
     return {
@@ -125,9 +127,9 @@ async def recuperar_senha_usuario(
 
     encoding_cadastrado = reconhecimento_service.texto_para_encoding(usuario.encoding)
     distancia = reconhecimento_service._calcular_distancia(encoding_novo, encoding_cadastrado)
-    print(f"Recuperacao de senha (usuario) — distancia: {distancia:.4f}")
+    print(f"Recuperacao de senha (usuario {matricula}) — distancia: {distancia:.4f} | limiar: {TOLERANCIA_RECUPERACAO}")
 
-    if distancia > 2.0:
+    if distancia > TOLERANCIA_RECUPERACAO:
         raise HTTPException(status_code=401, detail="Rosto não corresponde ao cadastro.")
 
     if not usuario_repo.redefinir_senha(matricula, nova_senha):
@@ -161,9 +163,9 @@ async def recuperar_senha_professor(
 
     encoding_cadastrado = reconhecimento_service.texto_para_encoding(professor.encoding)
     distancia = reconhecimento_service._calcular_distancia(encoding_novo, encoding_cadastrado)
-    print(f"Recuperacao de senha (professor) — distancia: {distancia:.4f}")
+    print(f"Recuperacao de senha (professor {siape}) — distancia: {distancia:.4f} | limiar: {TOLERANCIA_RECUPERACAO}")
 
-    if distancia > 2.0:
+    if distancia > TOLERANCIA_RECUPERACAO:
         raise HTTPException(status_code=401, detail="Rosto não corresponde ao cadastro.")
 
     if not professor_repo.redefinir_senha(siape, nova_senha):
@@ -181,7 +183,6 @@ def liberar_acesso(matricula: str = Form(...)):
     row = usuario_repo.liberar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    # Permissão alterada — invalida o cache de embeddings
     reconhecimento_service.invalidar_cache()
     return {"mensagem": f"Acesso liberado para {row[1]}!"}
 
@@ -191,7 +192,6 @@ def revogar_acesso(matricula: str = Form(...)):
     row = usuario_repo.revogar_acesso(matricula)
     if not row:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    # Permissão alterada — invalida o cache de embeddings
     reconhecimento_service.invalidar_cache()
     return {"mensagem": f"Acesso revogado para {row[1]}."}
 
@@ -216,7 +216,6 @@ async def cadastrar_admin(
     encoding_str = reconhecimento_service.encoding_para_texto(encoding)
     admin        = professor_repo.criar(nome, siape, senha, encoding_str)
 
-    # Novo professor cadastrado — invalida o cache de embeddings
     reconhecimento_service.invalidar_cache()
 
     return {"id": admin.id, "nome": admin.nome, "mensagem": "Professor cadastrado com sucesso!"}
@@ -255,11 +254,13 @@ def acessos_por_data(data: str):
 def historico_usuario(usuario_id: int):
     return acesso_repo.listar_por_usuario(usuario_id)
 
+
 @app.post("/log_totem")
 async def log_totem(dados: dict):
     mensagem = dados.get("mensagem", "")
     print(f"[TOTEM] {mensagem}")
     return {"ok": True}
+
 
 @app.get("/debug/redis")
 async def debug_redis():
@@ -269,6 +270,7 @@ async def debug_redis():
         "disponivel": cache.disponivel,
         "redis_url_presente": bool(os.environ.get("REDIS_URL"))
     }
+
 
 if __name__ == "__main__":
     import uvicorn
