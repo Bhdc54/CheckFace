@@ -12,7 +12,7 @@ from services.reconhecimento_service import ReconhecimentoService
 
 app = FastAPI(
     title="CheckFace — Sistema Integrado de Gestão e Controle de Acesso via Reconhecimento Facial em Tempo Real",
-    version="3.0.0"
+    version="3.1.0"
 )
 
 usuario_repo           = AlunoRepository()
@@ -26,7 +26,7 @@ TOLERANCIA_RECUPERACAO = 0.8
 
 @app.get("/")
 def inicio():
-    return {"mensagem": "CheckFace API funcionando", "versao": "3.0.0"}
+    return {"mensagem": "CheckFace API funcionando", "versao": "3.1.0"}
 
 
 # ============================================================
@@ -179,10 +179,12 @@ async def recuperar_senha_professor(
 # ============================================================
 
 @app.post("/admin/liberar_acesso")
-def liberar_acesso(matricula: str = Form(...)):
-    row = usuario_repo.liberar_acesso(matricula)
+def liberar_acesso(matricula: str = Form(...), siape: str = Form(...)):
+    # A liberacao agora vive na tabela professores_alunos, entao precisamos
+    # do SIAPE do professor logado que esta concedendo o acesso.
+    row = usuario_repo.liberar_acesso(matricula, siape)
     if not row:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        raise HTTPException(status_code=404, detail="Aluno ou professor não encontrado.")
     reconhecimento_service.invalidar_cache()
     return {"mensagem": f"Acesso liberado para {row[1]}!"}
 

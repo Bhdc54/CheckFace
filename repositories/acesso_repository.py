@@ -20,28 +20,40 @@ def _formatar_data(data) -> str:
     return d
 
 
+# tipo_usuario derivado de qual FK esta preenchida
+_TIPO = ("CASE WHEN a.id_aluno IS NOT NULL THEN 'aluno' "
+         "WHEN a.id_professor IS NOT NULL THEN 'professor' "
+         "ELSE 'desconhecido' END")
+
+
 class AcessoRepository:
 
-    def registrar(self, usuario_id: int, data, hora, status: str, confianca: float = None, tipo_usuario: str = "aluno") -> Acesso:
+    def registrar(self, usuario_id, data, hora, status: str,
+                  confianca: float = None, tipo_usuario: str = "aluno") -> Acesso:
+        # Decide qual coluna preencher conforme o tipo reconhecido.
+        id_professor = usuario_id if tipo_usuario == "professor" else None
+        id_aluno     = usuario_id if tipo_usuario == "aluno"     else None
+
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO acessos (usuario_id, data, hora, status, confianca, tipo_usuario) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (usuario_id, data, hora, status, confianca, tipo_usuario)
+            """INSERT INTO acessos (id_professor, id_aluno, data, hora, status, confianca)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (id_professor, id_aluno, data, hora, status, confianca)
         )
-        acesso_id = cursor.fetchone()[0]
         conn.commit()
         cursor.close()
         conn.close()
-        return Acesso(acesso_id, usuario_id, data, hora, status, confianca)
+        return Acesso(id_professor, id_aluno, data, hora, status, confianca)
 
     def listar_por_usuario(self, usuario_id: int):
+        # Historico do aluno (a tela do aluno usa o proprio id_aluno).
         conn = conectar()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT a.id, a.data, a.hora, a.status, a.confianca
+            SELECT a.data, a.hora, a.status, a.confianca
             FROM acessos a
-            WHERE a.usuario_id = %s
+            WHERE a.id_aluno = %s
             ORDER BY a.data DESC, a.hora DESC
         """, (usuario_id,))
         rows = cursor.fetchall()
@@ -49,11 +61,10 @@ class AcessoRepository:
         conn.close()
         return [
             {
-                "id": r[0],
-                "data": _formatar_data(r[1]),
-                "hora": _formatar_hora(r[2]),
-                "status": r[3],
-                "confianca": r[4]
+                "data": _formatar_data(r[0]),
+                "hora": _formatar_hora(r[1]),
+                "status": r[2],
+                "confianca": r[3]
             }
             for r in rows
         ]
@@ -61,14 +72,15 @@ class AcessoRepository:
     def listar_todos(self):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 COALESCE(al.nome, pr.nome, 'Desconhecido') AS nome,
-                COALESCE(al.matricula, pr.siape, '-') AS matricula,
-                a.data, a.hora, a.status, a.confianca, a.tipo_usuario
+                COALESCE(al.matricula, pr.siape, '-')       AS matricula,
+                a.data, a.hora, a.status, a.confianca,
+                {_TIPO} AS tipo_usuario
             FROM acessos a
-            LEFT JOIN alunos al ON al.id = a.usuario_id AND a.tipo_usuario = 'aluno'
-            LEFT JOIN professores pr ON pr.id = a.usuario_id AND a.tipo_usuario = 'professor'
+            LEFT JOIN alunos      al ON al.id_aluno     = a.id_aluno
+            LEFT JOIN professores pr ON pr.id_professor = a.id_professor
             ORDER BY a.data DESC, a.hora DESC
         """)
         rows = cursor.fetchall()
@@ -90,14 +102,15 @@ class AcessoRepository:
     def listar_hoje(self):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 COALESCE(al.nome, pr.nome, 'Desconhecido') AS nome,
-                COALESCE(al.matricula, pr.siape, '-') AS matricula,
-                a.hora, a.status, a.confianca, a.tipo_usuario
+                COALESCE(al.matricula, pr.siape, '-')       AS matricula,
+                a.hora, a.status, a.confianca,
+                {_TIPO} AS tipo_usuario
             FROM acessos a
-            LEFT JOIN alunos al ON al.id = a.usuario_id AND a.tipo_usuario = 'aluno'
-            LEFT JOIN professores pr ON pr.id = a.usuario_id AND a.tipo_usuario = 'professor'
+            LEFT JOIN alunos      al ON al.id_aluno     = a.id_aluno
+            LEFT JOIN professores pr ON pr.id_professor = a.id_professor
             WHERE a.data = CURRENT_DATE
             ORDER BY a.hora DESC
         """)
@@ -119,14 +132,15 @@ class AcessoRepository:
     def listar_por_data(self, data: str):
         conn = conectar()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT
                 COALESCE(al.nome, pr.nome, 'Desconhecido') AS nome,
-                COALESCE(al.matricula, pr.siape, '-') AS matricula,
-                a.hora, a.status, a.confianca, a.tipo_usuario
+                COALESCE(al.matricula, pr.siape, '-')       AS matricula,
+                a.hora, a.status, a.confianca,
+                {_TIPO} AS tipo_usuario
             FROM acessos a
-            LEFT JOIN alunos al ON al.id = a.usuario_id AND a.tipo_usuario = 'aluno'
-            LEFT JOIN professores pr ON pr.id = a.usuario_id AND a.tipo_usuario = 'professor'
+            LEFT JOIN alunos      al ON al.id_aluno     = a.id_aluno
+            LEFT JOIN professores pr ON pr.id_professor = a.id_professor
             WHERE a.data = %s
             ORDER BY a.hora DESC
         """, (data,))
