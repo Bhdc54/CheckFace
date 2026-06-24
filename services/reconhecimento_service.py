@@ -67,7 +67,7 @@ class ReconhecimentoService:
     def invalidar_cache(self):
         self.cache.invalidar_embeddings()
 
-    # ------ Extração de encoding (cadastro) ------
+    # ------ Extração de encoding app ------
 
     def extrair_encoding(self, foto_bytes: bytes):
         try:
@@ -143,7 +143,7 @@ class ReconhecimentoService:
 
         # 4. Verifica limiar
         if melhor_usuario is None or menor_distancia > TOLERANCIA:
-            self.acesso_repo.registrar(None, agora.date(), agora.time(), "negado", 0.0, "desconhecido")
+            # Acesso negado por nao reconhecimento nao e gravado no banco
             resposta = {"status": "negado", "mensagem": "Acesso NEGADO — pessoa nao cadastrada.", "data": data_str, "hora": hora_str}
             self.cache.salvar_resultado(encoding_capturado, resposta)
             return resposta
@@ -162,7 +162,7 @@ class ReconhecimentoService:
 
         # 6. Verifica permissão
         if not acesso_liberado:
-            self.acesso_repo.registrar(usuario_id, agora.date(), agora.time(), "negado", confianca, tipo_usuario)
+            # Acesso negado por falta de permissao nao e gravado no banco
             resposta = {
                 "status":       "negado",
                 "mensagem":     f"Acesso NEGADO — {nome} nao tem permissao.",
